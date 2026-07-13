@@ -41,11 +41,44 @@ export interface SyncResult {
   last_sync: string
 }
 
+export interface GanttStage {
+  id: number
+  name: string
+  task_key: string | null
+  jira_url: string | null
+  start_date: string
+  end_date: string
+}
+
+export interface GanttChart {
+  id: number
+  title: string
+  created_at: string
+  stages: GanttStage[]
+}
+
+export interface GanttStageInput {
+  name?: string
+  task_key?: string
+  start_date: string
+  end_date: string
+}
+
 async function handle<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
-    const detail = await resp.text()
-    throw new Error(`${resp.status}: ${detail}`)
+    const text = await resp.text()
+    let message = text
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed && typeof parsed.detail === 'string') {
+        message = parsed.detail
+      }
+    } catch {
+      // ответ не JSON — используем как есть
+    }
+    throw new Error(message || `${resp.status}`)
   }
+  if (resp.status === 204) return undefined as T
   return resp.json() as Promise<T>
 }
 
@@ -59,4 +92,43 @@ export function fetchStats(): Promise<Stats> {
 
 export function triggerSync(): Promise<SyncResult> {
   return fetch(`${API_BASE}/sync`, { method: 'POST' }).then((r) => handle<SyncResult>(r))
+}
+
+function jsonRequest<T>(url: string, method: string, body?: unknown): Promise<T> {
+  return fetch(url, {
+    method,
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  }).then((r) => handle<T>(r))
+}
+
+export function fetchGanttCharts(): Promise<GanttChart[]> {
+  return jsonRequest(`${API_BASE}/gantt/charts`, 'GET')
+}
+
+export function fetchGanttChart(chartId: number): Promise<GanttChart> {
+  return jsonRequest(`${API_BASE}/gantt/charts/${chartId}`, 'GET')
+}
+
+export function createGanttChart(title: string): Promise<GanttChart> {
+  return jsonRequest(`${API_BASE}/gantt/charts`, 'POST', { title })
+}
+
+export function deleteGanttChart(chartId: number): Promise<void> {
+  return jsonRequest(`${API_BASE}/gantt/charts/${chartId}`, 'DELETE')
+}
+
+export function addGanttStage(chartId: number, stage: GanttStageInput): Promise<GanttStage> {
+  return jsonRequest(`${API_BASE}/gantt/charts/${chartId}/stages`, 'POST', stage)
+}
+
+export function updateGanttStage(
+  stageId: number,
+  stage: Partial<GanttStageInput>,
+): Promise<GanttStage> {
+  return jsonRequest(`${API_BASE}/gantt/stages/${stageId}`, 'PATCH', stage)
+}
+
+export function deleteGanttStage(stageId: number): Promise<void> {
+  return jsonRequest(`${API_BASE}/gantt/stages/${stageId}`, 'DELETE')
 }

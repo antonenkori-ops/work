@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -49,3 +49,31 @@ class SyncState(Base):
     id = Column(Integer, primary_key=True)
     last_sync = Column(DateTime, nullable=True)
     last_sync_tasks_count = Column(Integer, nullable=True)
+
+
+class GanttChart(Base):
+    __tablename__ = "gantt_charts"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+    stages = relationship(
+        "GanttStage",
+        back_populates="chart",
+        cascade="all, delete-orphan",
+        order_by="GanttStage.start_date",
+    )
+
+
+class GanttStage(Base):
+    __tablename__ = "gantt_stages"
+
+    id = Column(Integer, primary_key=True)
+    chart_id = Column(Integer, ForeignKey("gantt_charts.id"), nullable=False)
+    name = Column(String, nullable=False)
+    task_key = Column(String, ForeignKey("tasks.key"), nullable=True)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+
+    chart = relationship("GanttChart", back_populates="stages")

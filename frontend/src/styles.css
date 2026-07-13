@@ -9,7 +9,59 @@ body {
   color: #1a1a1a;
 }
 
-.app {
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 20px 0;
+}
+
+.sidebar-title {
+  font-weight: 700;
+  padding: 0 20px 16px;
+  border-bottom: 1px solid #1f2937;
+  margin-bottom: 8px;
+}
+
+.sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #cbd5e1;
+  border-radius: 0;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.sidebar-item:hover {
+  background: #1f2937;
+}
+
+.sidebar-item-active {
+  background: #2563eb;
+  color: white;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.page {
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px 64px;
@@ -20,6 +72,12 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-header h1 {
+  margin: 8px 0 0;
 }
 
 .app-header-actions {
@@ -46,6 +104,29 @@ button {
 button:disabled {
   background: #94a3b8;
   cursor: default;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  color: #1a1a1a;
+}
+
+.btn-danger {
+  background: #dc2626;
+}
+
+.inline-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.inline-form input[type='text'] {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
 }
 
 .error-banner {
@@ -183,4 +264,188 @@ button:disabled {
   color: #666;
   padding: 24px;
   text-align: center;
+}
+
+/* Диаграммы Ганта — список */
+
+.chart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chart-list-item {
+  background: white;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-list-item:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.chart-list-title {
+  font-weight: 600;
+}
+
+.chart-list-meta {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.chart-delete-btn {
+  background: #fee2e2;
+  color: #991b1b;
+  flex-shrink: 0;
+}
+
+/* Форма этапа */
+
+.stage-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.stage-form-source {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.stage-form-source label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.stage-form input[type='text'],
+.stage-form input[type='date'],
+.stage-form select {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.stage-form select {
+  min-width: 220px;
+}
+
+.stage-form .error-banner {
+  width: 100%;
+  margin: 0;
+}
+
+/* Таймлайн */
+
+.gantt {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.gantt-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.gantt-row:last-child {
+  border-bottom: none;
+}
+
+.gantt-header-row {
+  min-height: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 6px;
+}
+
+.gantt-label-col {
+  width: 260px;
+  flex-shrink: 0;
+  padding-right: 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.gantt-label-col a {
+  color: #2563eb;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gantt-label-col a:hover {
+  text-decoration: underline;
+}
+
+.gantt-row-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gantt-row-actions button {
+  background: transparent;
+  color: #94a3b8;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.gantt-row-actions button:hover {
+  color: #1a1a1a;
+}
+
+.gantt-track-col {
+  position: relative;
+  flex: 1;
+  height: 20px;
+}
+
+.gantt-tick {
+  position: absolute;
+  font-size: 11px;
+  color: #94a3b8;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.gantt-today-line {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 1px;
+  background: #dc2626;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 3px;
+  height: 14px;
+  min-width: 4px;
+  background: #2563eb;
+  border-radius: 4px;
 }
