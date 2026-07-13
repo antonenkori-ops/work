@@ -10,6 +10,7 @@ export interface Comment {
 
 export interface Task {
   key: string
+  jira_url: string
   summary: string
   description: string | null
   status: string
@@ -30,6 +31,8 @@ export interface Stats {
   done_this_year: number
   done_this_month: number
   done_this_week: number
+  open_total: number
+  status_counts: Record<string, number>
 }
 
 export interface SyncResult {

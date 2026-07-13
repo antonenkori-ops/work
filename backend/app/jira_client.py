@@ -1,11 +1,16 @@
 from datetime import datetime
 
 import requests
+import urllib3
 from requests.auth import HTTPBasicAuth
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Comment, SyncState, Task
+
+# Jira тут — внутренний сервер с сертификатом, которому Python не доверяет по умолчанию,
+# и это ожидаемо в данной сети. Отключаем проверку SSL и глушим предупреждение urllib3 об этом.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 FIELDS = [
     "summary",
@@ -50,29 +55,53 @@ def _fetch_all_issues() -> list[dict]:
 
     session = requests.Session()
     session.auth = HTTPBasicAuth(settings.jira_username, settings.jira_password)
-    session.headers.update({"Accept": "application/json"})
+    session.verify = False
+    session.headers.update(
+        {
+            "Accept": "application/json",
+            "X-Atlassian-Token": "no-check",
+        }
+    )
 
     url = f"{settings.jira_base_url.rstrip('/')}/rest/api/2/search"
     issues: list[dict] = []
     start_at = 0
 
     while True:
-        resp = session.post(
-            url,
-            json={
-                "jql": settings.jira_jql,
-                "startAt": start_at,
-                "maxResults": PAGE_SIZE,
-                "fields": FIELDS,
-            },
-            timeout=30,
-        )
+        try:
+            resp = session.post(
+                url,
+                json={
+                    "jql": settings.jira_jql,
+                    "startAt": start_at,
+                    "maxResults": PAGE_SIZE,
+                    "fields": FIELDS,
+                },
+                timeout=30,
+            )
+        except requests.exceptions.SSLError as exc:
+            raise JiraSyncError(f"Ошибка SSL при подключении к Jira: {exc}") from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise JiraSyncError(
+                f"Не удалось подключиться к {settings.jira_base_url}: {exc}"
+            ) from exc
+        except requests.exceptions.Timeout as exc:
+            raise JiraSyncError("Jira не ответила за 30 секунд (таймаут)") from exc
+        except requests.exceptions.RequestException as exc:
+            raise JiraSyncError(f"Ошибка запроса к Jira: {exc}") from exc
+
         if resp.status_code == 401:
             raise JiraSyncError("Jira вернула 401 Unauthorized — проверьте логин/пароль в .env")
         if not resp.ok:
             raise JiraSyncError(f"Jira вернула ошибку {resp.status_code}: {resp.text[:500]}")
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise JiraSyncError(
+                "Jira вернула не JSON, а что-то другое (возможно, HTML-страницу логина "
+                f"или ошибку прокси). Начало ответа: {resp.text[:300]!r}"
+            ) from exc
         batch = data.get("issues", [])
         issues.extend(batch)
 

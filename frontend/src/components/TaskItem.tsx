@@ -9,7 +9,9 @@ export default function TaskItem({ task }: { task: Task }) {
   return (
     <div className="task-item">
       <div className="task-header">
-        <span className="task-key">{task.key}</span>
+        <a className="task-key" href={task.jira_url} target="_blank" rel="noopener noreferrer">
+          {task.key}
+        </a>
         <span className="task-summary">{task.summary}</span>
         <span className="task-status">{task.status}</span>
       </div>

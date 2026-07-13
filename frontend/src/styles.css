@@ -56,11 +56,17 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.stats-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
 .stats-panel {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-bottom: 32px;
 }
 
 .stats-card {
@@ -105,6 +111,11 @@ button:disabled {
 .task-key {
   font-weight: 700;
   color: #2563eb;
+  text-decoration: none;
+}
+
+.task-key:hover {
+  text-decoration: underline;
 }
 
 .task-summary {

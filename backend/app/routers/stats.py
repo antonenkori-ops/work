@@ -10,11 +10,19 @@ from app.schemas import StatsOut
 
 router = APIRouter(prefix="/api", tags=["stats"])
 
+# Точные названия статусов Jira, по которым считаем отдельные плитки.
+STATUS_TILES = ["В работу", "В работе", "Need Info"]
+
 
 def _done_count_since(db: Session, since: datetime | None) -> int:
     stmt = select(func.count(Task.key)).where(Task.status_category == "done")
     if since is not None:
         stmt = stmt.where(Task.resolved >= since)
+    return db.execute(stmt).scalar_one()
+
+
+def _status_count(db: Session, status: str) -> int:
+    stmt = select(func.count(Task.key)).where(Task.status == status)
     return db.execute(stmt).scalar_one()
 
 
@@ -26,9 +34,15 @@ def get_stats(db: Session = Depends(get_db)):
     start_of_month = start_of_today.replace(day=1)
     start_of_year = start_of_today.replace(month=1, day=1)
 
+    open_total = db.execute(
+        select(func.count(Task.key)).where(Task.status_category != "done")
+    ).scalar_one()
+
     return StatsOut(
         done_total=_done_count_since(db, None),
         done_this_year=_done_count_since(db, start_of_year),
         done_this_month=_done_count_since(db, start_of_month),
         done_this_week=_done_count_since(db, start_of_week),
+        open_total=open_total,
+        status_counts={status: _status_count(db, status) for status in STATUS_TILES},
     )

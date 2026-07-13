@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+from app.config import settings
 
 
 class CommentOut(BaseModel):
@@ -31,12 +33,19 @@ class TaskOut(BaseModel):
     resolved: datetime | None
     comments: list[CommentOut] = []
 
+    @computed_field
+    @property
+    def jira_url(self) -> str:
+        return f"{settings.jira_base_url.rstrip('/')}/browse/{self.key}"
+
 
 class StatsOut(BaseModel):
     done_total: int
     done_this_year: int
     done_this_month: int
     done_this_week: int
+    open_total: int
+    status_counts: dict[str, int]
 
 
 class SyncResultOut(BaseModel):
