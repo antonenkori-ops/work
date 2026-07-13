@@ -70,7 +70,7 @@ export interface GanttStageInput {
   task_key?: string
   parent_id?: number
   depends_on_id?: number
-  start_date: string
+  start_date?: string
   end_date: string
 }
 

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -60,9 +60,9 @@ def _validate_parent(db: Session, chart_id: int, stage_id: int | None, parent_id
             depth += 1
 
 
-def _validate_and_check_dependency(
-    db: Session, chart_id: int, stage_id: int | None, depends_on_id: int, start_date: date
-) -> None:
+def _validate_dependency(
+    db: Session, chart_id: int, stage_id: int | None, depends_on_id: int
+) -> GanttStage:
     predecessor = db.get(GanttStage, depends_on_id)
     if predecessor is None or predecessor.chart_id != chart_id:
         raise HTTPException(
@@ -80,14 +80,21 @@ def _validate_and_check_dependency(
                 )
             current = db.get(GanttStage, current.depends_on_id) if current.depends_on_id else None
             depth += 1
-    if start_date < predecessor.end_date:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Этап не может начаться раньше {predecessor.end_date.isoformat()} — "
-                f"даты завершения этапа-предшественника «{predecessor.name}»"
-            ),
-        )
+    return predecessor
+
+
+def _cascade_dependents(db: Session, stage: GanttStage, visited: set[int]) -> None:
+    # Если у этапа сдвинулась дата окончания, все этапы, которые от него зависят,
+    # должны "приехать" вслед за ним — сохраняя свою длительность.
+    stmt = select(GanttStage).where(GanttStage.depends_on_id == stage.id)
+    for dependent in db.execute(stmt).scalars().all():
+        if dependent.id in visited:
+            continue
+        visited.add(dependent.id)
+        duration_days = (dependent.end_date - dependent.start_date).days
+        dependent.start_date = stage.end_date
+        dependent.end_date = stage.end_date + timedelta(days=duration_days)
+        _cascade_dependents(db, dependent, visited)
 
 
 def _clear_dangling_dependencies(db: Session, removed_ids: set[int]) -> None:
@@ -134,9 +141,6 @@ def delete_chart(chart_id: int, db: Session = Depends(get_db)):
 def add_stage(chart_id: int, payload: GanttStageCreate, db: Session = Depends(get_db)):
     chart = _get_chart(db, chart_id)
 
-    if payload.end_date < payload.start_date:
-        raise HTTPException(status_code=400, detail="Дата окончания раньше даты начала")
-
     name = payload.name
     if payload.task_key:
         task = db.get(Task, payload.task_key)
@@ -149,10 +153,24 @@ def add_stage(chart_id: int, payload: GanttStageCreate, db: Session = Depends(ge
 
     if payload.parent_id is not None:
         _validate_parent(db, chart_id, None, payload.parent_id)
+
+    predecessor = None
     if payload.depends_on_id is not None:
-        _validate_and_check_dependency(
-            db, chart_id, None, payload.depends_on_id, payload.start_date
+        predecessor = _validate_dependency(db, chart_id, None, payload.depends_on_id)
+
+    # Если у этапа есть предшественник — дата начала всегда берётся из его даты
+    # окончания, ручной ввод даты начала в этом случае игнорируется.
+    if predecessor is not None:
+        start_date = predecessor.end_date
+    elif payload.start_date is not None:
+        start_date = payload.start_date
+    else:
+        raise HTTPException(
+            status_code=400, detail="Укажите дату начала или выберите этап-предшественник"
         )
+
+    if payload.end_date < start_date:
+        raise HTTPException(status_code=400, detail="Дата окончания раньше даты начала")
 
     siblings = [s for s in chart.stages if s.parent_id == payload.parent_id]
     next_order = (max((s.sort_order for s in siblings), default=-1)) + 1
@@ -163,7 +181,7 @@ def add_stage(chart_id: int, payload: GanttStageCreate, db: Session = Depends(ge
         depends_on_id=payload.depends_on_id,
         name=name,
         task_key=payload.task_key,
-        start_date=payload.start_date,
+        start_date=start_date,
         end_date=payload.end_date,
         sort_order=next_order,
     )
@@ -178,26 +196,48 @@ def update_stage(stage_id: int, payload: GanttStageUpdate, db: Session = Depends
     stage = _get_stage(db, stage_id)
     fields = payload.model_dump(exclude_unset=True)
 
-    new_start = fields.get("start_date", stage.start_date)
-    new_end = fields.get("end_date", stage.end_date)
-    if new_end < new_start:
-        raise HTTPException(status_code=400, detail="Дата окончания раньше даты начала")
-
     new_depends_on_id = (
         fields["depends_on_id"] if "depends_on_id" in fields else stage.depends_on_id
     )
+    predecessor = None
     if new_depends_on_id is not None:
-        _validate_and_check_dependency(db, stage.chart_id, stage.id, new_depends_on_id, new_start)
+        predecessor = _validate_dependency(db, stage.chart_id, stage.id, new_depends_on_id)
+
+    if predecessor is not None:
+        # Дата начала всегда синхронизирована с окончанием предшественника —
+        # ручная дата начала (если пришла) игнорируется.
+        new_start = predecessor.end_date
+    else:
+        new_start = fields.get("start_date", stage.start_date)
+
+    if "end_date" in fields:
+        new_end = fields["end_date"]
+    elif new_start != stage.start_date:
+        # Старт сместился (например, подтянулся к предшественнику) — сохраняем длительность.
+        duration_days = (stage.end_date - stage.start_date).days
+        new_end = new_start + timedelta(days=duration_days)
+    else:
+        new_end = stage.end_date
+
+    if new_end < new_start:
+        raise HTTPException(status_code=400, detail="Дата окончания раньше даты начала")
 
     if "name" in fields:
         stage.name = fields["name"]
-    stage.start_date = new_start
-    stage.end_date = new_end
     if "depends_on_id" in fields:
         stage.depends_on_id = new_depends_on_id
 
+    end_changed = new_end != stage.end_date
+    stage.start_date = new_start
+    stage.end_date = new_end
     db.commit()
     db.refresh(stage)
+
+    if end_changed:
+        _cascade_dependents(db, stage, {stage.id})
+        db.commit()
+        db.refresh(stage)
+
     return stage
 
 

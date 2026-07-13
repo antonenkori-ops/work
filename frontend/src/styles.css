@@ -62,9 +62,8 @@ body {
 }
 
 .page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
+  width: 100%;
+  padding: 24px 32px 64px;
 }
 
 .app-header {
@@ -335,6 +334,7 @@ button:disabled {
 
 .stage-form input[type='text'],
 .stage-form input[type='date'],
+.stage-form input[type='number'],
 .stage-form select {
   padding: 8px 10px;
   border: 1px solid #d1d5db;
@@ -344,6 +344,23 @@ button:disabled {
 
 .stage-form select {
   min-width: 220px;
+}
+
+.stage-form input:disabled {
+  background: #f3f4f6;
+  color: #888;
+}
+
+.stage-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.stage-form-duration {
+  width: 70px;
 }
 
 .stage-form .error-banner {
@@ -536,4 +553,8 @@ button:disabled {
   width: 6px;
   flex-shrink: 0;
   cursor: ew-resize;
+}
+
+.gantt-bar-locked {
+  cursor: default;
 }

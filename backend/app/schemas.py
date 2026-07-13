@@ -59,7 +59,7 @@ class GanttStageCreate(BaseModel):
     task_key: str | None = None
     parent_id: int | None = None
     depends_on_id: int | None = None
-    start_date: date
+    start_date: date | None = None  # можно не указывать, если задан depends_on_id
     end_date: date
 
 

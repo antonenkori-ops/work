@@ -332,17 +332,23 @@ export default function GanttTimeline({
                   className={`gantt-bar${violated ? ' gantt-bar-violated' : ''}`}
                   style={barStyle(stage)}
                   title={`${stage.start_date} — ${stage.end_date} (${stage.duration_days} дн.)${
-                    violated ? '\nНачинается раньше завершения предшественника!' : ''
+                    stage.depends_on_id ? '\nНачало определяется предшественником' : ''
                   }`}
                 >
-                  <span
-                    className="gantt-bar-handle gantt-bar-handle-left"
-                    onMouseDown={(e) => handleBarMouseDown(e, stage, 'resize-left')}
-                  />
-                  <span
-                    className="gantt-bar-body"
-                    onMouseDown={(e) => handleBarMouseDown(e, stage, 'move')}
-                  />
+                  {stage.depends_on_id ? (
+                    <span className="gantt-bar-body gantt-bar-locked" />
+                  ) : (
+                    <>
+                      <span
+                        className="gantt-bar-handle gantt-bar-handle-left"
+                        onMouseDown={(e) => handleBarMouseDown(e, stage, 'resize-left')}
+                      />
+                      <span
+                        className="gantt-bar-body"
+                        onMouseDown={(e) => handleBarMouseDown(e, stage, 'move')}
+                      />
+                    </>
+                  )}
                   <span
                     className="gantt-bar-handle gantt-bar-handle-right"
                     onMouseDown={(e) => handleBarMouseDown(e, stage, 'resize-right')}
