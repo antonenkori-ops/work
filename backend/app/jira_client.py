@@ -49,10 +49,7 @@ def _field_name(field: dict | None) -> str | None:
     return field.get("displayName") or field.get("name")
 
 
-def _fetch_all_issues() -> list[dict]:
-    if not settings.jira_base_url:
-        raise JiraSyncError("JIRA_BASE_URL не задан в .env")
-
+def _make_session() -> requests.Session:
     session = requests.Session()
     session.auth = HTTPBasicAuth(settings.jira_username, settings.jira_password)
     session.verify = False
@@ -62,55 +59,42 @@ def _fetch_all_issues() -> list[dict]:
             "X-Atlassian-Token": "no-check",
         }
     )
+    return session
 
-    url = f"{settings.jira_base_url.rstrip('/')}/rest/api/2/search"
-    issues: list[dict] = []
-    start_at = 0
 
-    while True:
-        try:
-            resp = session.post(
-                url,
-                json={
-                    "jql": settings.jira_jql,
-                    "startAt": start_at,
-                    "maxResults": PAGE_SIZE,
-                    "fields": FIELDS,
-                },
-                timeout=30,
-            )
-        except requests.exceptions.SSLError as exc:
-            raise JiraSyncError(f"Ошибка SSL при подключении к Jira: {exc}") from exc
-        except requests.exceptions.ConnectionError as exc:
-            raise JiraSyncError(
-                f"Не удалось подключиться к {settings.jira_base_url}: {exc}"
-            ) from exc
-        except requests.exceptions.Timeout as exc:
-            raise JiraSyncError("Jira не ответила за 30 секунд (таймаут)") from exc
-        except requests.exceptions.RequestException as exc:
-            raise JiraSyncError(f"Ошибка запроса к Jira: {exc}") from exc
+def _fetch_page(session: requests.Session, url: str, start_at: int) -> dict:
+    try:
+        resp = session.post(
+            url,
+            json={
+                "jql": settings.jira_jql,
+                "startAt": start_at,
+                "maxResults": PAGE_SIZE,
+                "fields": FIELDS,
+            },
+            timeout=30,
+        )
+    except requests.exceptions.SSLError as exc:
+        raise JiraSyncError(f"Ошибка SSL при подключении к Jira: {exc}") from exc
+    except requests.exceptions.ConnectionError as exc:
+        raise JiraSyncError(f"Не удалось подключиться к {settings.jira_base_url}: {exc}") from exc
+    except requests.exceptions.Timeout as exc:
+        raise JiraSyncError("Jira не ответила за 30 секунд (таймаут)") from exc
+    except requests.exceptions.RequestException as exc:
+        raise JiraSyncError(f"Ошибка запроса к Jira: {exc}") from exc
 
-        if resp.status_code == 401:
-            raise JiraSyncError("Jira вернула 401 Unauthorized — проверьте логин/пароль в .env")
-        if not resp.ok:
-            raise JiraSyncError(f"Jira вернула ошибку {resp.status_code}: {resp.text[:500]}")
+    if resp.status_code == 401:
+        raise JiraSyncError("Jira вернула 401 Unauthorized — проверьте логин/пароль в .env")
+    if not resp.ok:
+        raise JiraSyncError(f"Jira вернула ошибку {resp.status_code}: {resp.text[:500]}")
 
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise JiraSyncError(
-                "Jira вернула не JSON, а что-то другое (возможно, HTML-страницу логина "
-                f"или ошибку прокси). Начало ответа: {resp.text[:300]!r}"
-            ) from exc
-        batch = data.get("issues", [])
-        issues.extend(batch)
-
-        total = data.get("total", 0)
-        start_at += len(batch)
-        if start_at >= total or not batch:
-            break
-
-    return issues
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise JiraSyncError(
+            "Jira вернула не JSON, а что-то другое (возможно, HTML-страницу логина "
+            f"или ошибку прокси). Начало ответа: {resp.text[:300]!r}"
+        ) from exc
 
 
 def _upsert_issue(db: Session, raw: dict) -> None:
@@ -154,10 +138,32 @@ def _upsert_issue(db: Session, raw: dict) -> None:
 
 
 def sync(db: Session) -> tuple[int, int]:
-    issues = _fetch_all_issues()
+    if not settings.jira_base_url:
+        raise JiraSyncError("JIRA_BASE_URL не задан в .env")
 
-    for raw in issues:
-        _upsert_issue(db, raw)
+    session = _make_session()
+    url = f"{settings.jira_base_url.rstrip('/')}/rest/api/2/search"
+
+    start_at = 0
+    tasks_synced = 0
+
+    # Коммитим постранично, а не одной большой транзакцией в конце: при большом
+    # количестве задач синхронизация может занять минуты, и без промежуточных
+    # коммитов SQLite всё это время держит блокировку на запись, из-за чего
+    # страница со списком задач/статистикой у пользователя просто "висит".
+    while True:
+        data = _fetch_page(session, url, start_at)
+        batch = data.get("issues", [])
+
+        for raw in batch:
+            _upsert_issue(db, raw)
+        db.commit()
+        tasks_synced += len(batch)
+
+        total = data.get("total", 0)
+        start_at += len(batch)
+        if start_at >= total or not batch:
+            break
 
     comments_count = db.query(Comment).count()
 
@@ -166,7 +172,7 @@ def sync(db: Session) -> tuple[int, int]:
         state = SyncState(id=1)
         db.add(state)
     state.last_sync = datetime.now().astimezone()
-    state.last_sync_tasks_count = len(issues)
-
+    state.last_sync_tasks_count = tasks_synced
     db.commit()
-    return len(issues), comments_count
+
+    return tasks_synced, comments_count

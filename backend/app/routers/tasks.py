@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import jira_client
 from app.database import get_db
@@ -31,5 +31,6 @@ def list_in_work_tasks(db: Session = Depends(get_db)):
         select(Task)
         .where(Task.status_category.in_(["new", "indeterminate"]))
         .order_by(Task.updated.desc())
+        .options(selectinload(Task.comments))
     )
     return db.execute(stmt).scalars().all()
