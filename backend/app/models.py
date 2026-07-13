@@ -71,9 +71,24 @@ class GanttStage(Base):
 
     id = Column(Integer, primary_key=True)
     chart_id = Column(Integer, ForeignKey("gantt_charts.id"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("gantt_stages.id"), nullable=True)
+    # Этап-предшественник: этот этап не должен начинаться раньше, чем закончится предшественник.
+    depends_on_id = Column(Integer, ForeignKey("gantt_stages.id"), nullable=True)
+
     name = Column(String, nullable=False)
     task_key = Column(String, ForeignKey("tasks.key"), nullable=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
 
     chart = relationship("GanttChart", back_populates="stages")
+    children = relationship(
+        "GanttStage",
+        back_populates="parent",
+        foreign_keys=[parent_id],
+        cascade="all, delete-orphan",
+        order_by="GanttStage.sort_order",
+    )
+    parent = relationship(
+        "GanttStage", back_populates="children", remote_side=[id], foreign_keys=[parent_id]
+    )

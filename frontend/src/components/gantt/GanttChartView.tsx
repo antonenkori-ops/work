@@ -7,6 +7,8 @@ import {
   GanttChart,
   GanttStage,
   GanttStageInput,
+  GanttStageUpdateInput,
+  reorderGanttStages,
   updateGanttStage,
 } from '../../api'
 import GanttStageForm from './GanttStageForm'
@@ -18,10 +20,17 @@ interface Props {
   onDeleted: () => void
 }
 
+type FormMode = { type: 'add' } | { type: 'add-child'; parentId: number } | { type: 'edit'; stage: GanttStage }
+
+function formatDate(value: string | null): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('ru-RU')
+}
+
 export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
   const [chart, setChart] = useState<GanttChart | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [editingStage, setEditingStage] = useState<GanttStage | null>(null)
+  const [formMode, setFormMode] = useState<FormMode>({ type: 'add' })
 
   async function load() {
     setError(null)
@@ -34,26 +43,29 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
 
   useEffect(() => {
     load()
-    setEditingStage(null)
+    setFormMode({ type: 'add' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartId])
 
-  async function handleAddStage(data: GanttStageInput) {
-    await addGanttStage(chartId, data)
+  async function handleAddStage(data: GanttStageInput | GanttStageUpdateInput) {
+    await addGanttStage(chartId, data as GanttStageInput)
     await load()
   }
 
-  async function handleUpdateStage(data: GanttStageInput) {
-    if (!editingStage) return
-    await updateGanttStage(editingStage.id, data)
-    setEditingStage(null)
+  async function handleUpdateStage(data: GanttStageInput | GanttStageUpdateInput) {
+    if (formMode.type !== 'edit') return
+    await updateGanttStage(formMode.stage.id, data as GanttStageUpdateInput)
+    setFormMode({ type: 'add' })
     await load()
   }
 
   async function handleDeleteStage(stageId: number) {
-    if (!confirm('Удалить этап?')) return
+    if (!confirm('Удалить этап? Подпункты этого этапа удалятся вместе с ним.')) return
     try {
       await deleteGanttStage(stageId)
+      if (formMode.type === 'edit' && formMode.stage.id === stageId) {
+        setFormMode({ type: 'add' })
+      }
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -70,6 +82,25 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
     }
   }
 
+  async function handleDatesChange(stageId: number, startDate: string, endDate: string) {
+    try {
+      await updateGanttStage(stageId, { start_date: startDate, end_date: endDate })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      await load() // откатываем визуальный превью к тому, что реально сохранено
+    }
+  }
+
+  async function handleReorder(_parentId: number | null, orderedIds: number[]) {
+    try {
+      await reorderGanttStages(chartId, orderedIds)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   if (!chart) {
     return (
       <div className="page">
@@ -78,6 +109,13 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
       </div>
     )
   }
+
+  const formTitle =
+    formMode.type === 'edit'
+      ? 'Изменить этап'
+      : formMode.type === 'add-child'
+        ? 'Добавить подпункт'
+        : 'Добавить этап'
 
   return (
     <div className="page">
@@ -95,19 +133,30 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
 
       {error && <div className="error-banner">Ошибка: {error}</div>}
 
-      <h2>{editingStage ? 'Изменить этап' : 'Добавить этап'}</h2>
+      <div className="chart-summary">
+        Этапов: {chart.stage_count} · Срок: {formatDate(chart.overall_start)} —{' '}
+        {formatDate(chart.overall_end)}
+        {chart.overall_duration_days != null && ` (${chart.overall_duration_days} дн.)`}
+      </div>
+
+      <h2>{formTitle}</h2>
       <GanttStageForm
-        key={editingStage?.id ?? 'new'}
-        editingStage={editingStage}
-        onSubmit={editingStage ? handleUpdateStage : handleAddStage}
-        onCancel={editingStage ? () => setEditingStage(null) : undefined}
+        key={formMode.type === 'edit' ? formMode.stage.id : formMode.type === 'add-child' ? `child-${formMode.parentId}` : 'new'}
+        editingStage={formMode.type === 'edit' ? formMode.stage : null}
+        parentId={formMode.type === 'add-child' ? formMode.parentId : null}
+        allStages={chart.stages}
+        onSubmit={formMode.type === 'edit' ? handleUpdateStage : handleAddStage}
+        onCancel={formMode.type !== 'add' ? () => setFormMode({ type: 'add' }) : undefined}
       />
 
       <h2>Этапы</h2>
       <GanttTimeline
         stages={chart.stages}
-        onEdit={setEditingStage}
+        onEdit={(stage) => setFormMode({ type: 'edit', stage })}
+        onAddChild={(parentId) => setFormMode({ type: 'add-child', parentId })}
         onDelete={handleDeleteStage}
+        onDatesChange={handleDatesChange}
+        onReorder={handleReorder}
       />
     </div>
   )

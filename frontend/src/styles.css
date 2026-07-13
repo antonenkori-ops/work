@@ -351,6 +351,22 @@ button:disabled {
   margin: 0;
 }
 
+.stage-form-hint {
+  width: 100%;
+  font-size: 12px;
+  color: #666;
+}
+
+.chart-summary {
+  font-size: 13px;
+  color: #444;
+  background: white;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 /* Таймлайн */
 
 .gantt {
@@ -358,6 +374,10 @@ button:disabled {
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.gantt-body {
+  position: relative;
 }
 
 .gantt-row {
@@ -371,34 +391,73 @@ button:disabled {
   border-bottom: none;
 }
 
+.gantt-row-drop-target {
+  box-shadow: inset 0 2px 0 #2563eb;
+}
+
 .gantt-header-row {
   min-height: 24px;
   border-bottom: 1px solid #e2e8f0;
   margin-bottom: 6px;
 }
 
+.gantt-drop-end {
+  height: 12px;
+}
+
 .gantt-label-col {
   width: 260px;
   flex-shrink: 0;
-  padding-right: 12px;
+  padding-right: 8px;
   font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.gantt-label-col a {
+.gantt-label-col a,
+.gantt-stage-name {
   color: #2563eb;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.gantt-stage-name {
+  color: #1a1a1a;
+}
+
 .gantt-label-col a:hover {
   text-decoration: underline;
+}
+
+.gantt-drag-handle {
+  cursor: grab;
+  color: #cbd5e1;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.gantt-drag-handle:active {
+  cursor: grabbing;
+}
+
+.gantt-collapse-toggle {
+  background: transparent;
+  color: #666;
+  padding: 0 2px;
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 14px;
+}
+
+.gantt-collapse-spacer {
+  display: inline-block;
+  width: 14px;
+  flex-shrink: 0;
 }
 
 .gantt-row-actions {
@@ -417,6 +476,15 @@ button:disabled {
 
 .gantt-row-actions button:hover {
   color: #1a1a1a;
+}
+
+.gantt-duration-col {
+  width: 56px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+  padding-right: 12px;
 }
 
 .gantt-track-col {
@@ -445,7 +513,27 @@ button:disabled {
   position: absolute;
   top: 3px;
   height: 14px;
-  min-width: 4px;
+  min-width: 12px;
   background: #2563eb;
   border-radius: 4px;
+  display: flex;
+}
+
+.gantt-bar-violated {
+  background: #dc2626;
+}
+
+.gantt-bar-body {
+  flex: 1;
+  cursor: grab;
+}
+
+.gantt-bar-body:active {
+  cursor: grabbing;
+}
+
+.gantt-bar-handle {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: ew-resize;
 }

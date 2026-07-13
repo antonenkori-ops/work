@@ -43,11 +43,15 @@ export interface SyncResult {
 
 export interface GanttStage {
   id: number
+  parent_id: number | null
+  depends_on_id: number | null
   name: string
   task_key: string | null
   jira_url: string | null
   start_date: string
   end_date: string
+  sort_order: number
+  duration_days: number
 }
 
 export interface GanttChart {
@@ -55,13 +59,26 @@ export interface GanttChart {
   title: string
   created_at: string
   stages: GanttStage[]
+  stage_count: number
+  overall_start: string | null
+  overall_end: string | null
+  overall_duration_days: number | null
 }
 
 export interface GanttStageInput {
   name?: string
   task_key?: string
+  parent_id?: number
+  depends_on_id?: number
   start_date: string
   end_date: string
+}
+
+export interface GanttStageUpdateInput {
+  name?: string
+  start_date?: string
+  end_date?: string
+  depends_on_id?: number | null
 }
 
 async function handle<T>(resp: Response): Promise<T> {
@@ -124,11 +141,17 @@ export function addGanttStage(chartId: number, stage: GanttStageInput): Promise<
 
 export function updateGanttStage(
   stageId: number,
-  stage: Partial<GanttStageInput>,
+  stage: GanttStageUpdateInput,
 ): Promise<GanttStage> {
   return jsonRequest(`${API_BASE}/gantt/stages/${stageId}`, 'PATCH', stage)
 }
 
 export function deleteGanttStage(stageId: number): Promise<void> {
   return jsonRequest(`${API_BASE}/gantt/stages/${stageId}`, 'DELETE')
+}
+
+export function reorderGanttStages(chartId: number, stageIds: number[]): Promise<void> {
+  return jsonRequest(`${API_BASE}/gantt/charts/${chartId}/reorder`, 'POST', {
+    stage_ids: stageIds,
+  })
 }
