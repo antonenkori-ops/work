@@ -13,6 +13,7 @@ from app.schemas import (
     GanttStageCreate,
     GanttStageOut,
     GanttStageUpdate,
+    TaskOut,
 )
 
 router = APIRouter(prefix="/api/gantt", tags=["gantt"])
@@ -21,7 +22,11 @@ MAX_CHAIN_DEPTH = 200
 
 
 def _get_chart(db: Session, chart_id: int) -> GanttChart:
-    chart = db.get(GanttChart, chart_id, options=[selectinload(GanttChart.stages)])
+    chart = db.get(
+        GanttChart,
+        chart_id,
+        options=[selectinload(GanttChart.stages).selectinload(GanttStage.task)],
+    )
     if chart is None:
         raise HTTPException(status_code=404, detail="Диаграмма не найдена")
     return chart
@@ -111,8 +116,29 @@ def list_charts(db: Session = Depends(get_db)):
     stmt = (
         select(GanttChart)
         .order_by(GanttChart.created_at.desc())
-        .options(selectinload(GanttChart.stages))
+        .options(selectinload(GanttChart.stages).selectinload(GanttStage.task))
     )
+    return db.execute(stmt).scalars().all()
+
+
+@router.get("/available-tasks", response_model=list[TaskOut])
+def available_tasks(db: Session = Depends(get_db)):
+    # Задачи в работе, которые ещё не добавлены ни в одну диаграмму Ганта —
+    # чтобы одну и ту же задачу не заводили этапом сразу в нескольких местах.
+    used_keys = {
+        row[0]
+        for row in db.execute(
+            select(GanttStage.task_key).where(GanttStage.task_key.isnot(None))
+        ).all()
+    }
+    stmt = (
+        select(Task)
+        .where(Task.status_category.in_(["new", "indeterminate"]))
+        .order_by(Task.updated.desc())
+        .options(selectinload(Task.comments))
+    )
+    if used_keys:
+        stmt = stmt.where(Task.key.notin_(used_keys))
     return db.execute(stmt).scalars().all()
 
 
@@ -226,6 +252,13 @@ def update_stage(stage_id: int, payload: GanttStageUpdate, db: Session = Depends
         stage.name = fields["name"]
     if "depends_on_id" in fields:
         stage.depends_on_id = new_depends_on_id
+    if "done" in fields:
+        if stage.task_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Готовность этапа, привязанного к задаче Jira, определяется статусом задачи",
+            )
+        stage.done = fields["done"]
 
     end_changed = new_end != stage.end_date
     stage.start_date = new_start

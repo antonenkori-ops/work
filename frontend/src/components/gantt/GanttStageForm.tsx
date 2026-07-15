@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import {
-  fetchTasks,
+  fetchAvailableGanttTasks,
   GanttStage,
   GanttStageInput,
   GanttStageUpdateInput,
@@ -57,7 +57,7 @@ export default function GanttStageForm({
 
   useEffect(() => {
     if (source === 'jira' && availableTasks.length === 0) {
-      fetchTasks()
+      fetchAvailableGanttTasks()
         .then(setAvailableTasks)
         .catch((e) => setError(e instanceof Error ? e.message : String(e)))
     }

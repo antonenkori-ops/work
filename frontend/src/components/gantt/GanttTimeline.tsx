@@ -14,6 +14,7 @@ interface Props {
   onDelete: (stageId: number) => void
   onDatesChange: (stageId: number, startDate: string, endDate: string) => Promise<void>
   onReorder: (parentId: number | null, orderedIds: number[]) => Promise<void>
+  onToggleDone: (stageId: number, done: boolean) => Promise<void>
 }
 
 const ROW_HEIGHT = 36
@@ -49,6 +50,7 @@ export default function GanttTimeline({
   onDelete,
   onDatesChange,
   onReorder,
+  onToggleDone,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [preview, setPreview] = useState<{ id: number; start: Date; end: Date } | null>(null)
@@ -304,12 +306,23 @@ export default function GanttTimeline({
                 ) : (
                   <span className="gantt-collapse-spacer" />
                 )}
+                {!stage.task_key && (
+                  <input
+                    type="checkbox"
+                    className="gantt-done-checkbox"
+                    checked={stage.done}
+                    title="Отметить выполнение вручную"
+                    onChange={(e) => onToggleDone(stage.id, e.target.checked)}
+                  />
+                )}
                 {stage.jira_url ? (
                   <a href={stage.jira_url} target="_blank" rel="noopener noreferrer">
                     {stage.name}
                   </a>
                 ) : (
-                  <span className="gantt-stage-name">{stage.name}</span>
+                  <span className={`gantt-stage-name${stage.is_done ? ' gantt-stage-done' : ''}`}>
+                    {stage.name}
+                  </span>
                 )}
                 <span className="gantt-row-actions">
                   <button type="button" onClick={() => onAddChild(stage.id)} title="Добавить подпункт">
@@ -329,7 +342,14 @@ export default function GanttTimeline({
               <div className="gantt-track-col">
                 {showToday && <div className="gantt-today-line" style={{ left: `${todayPct}%` }} />}
                 <div
-                  className={`gantt-bar${violated ? ' gantt-bar-violated' : ''}`}
+                  className={[
+                    'gantt-bar',
+                    stage.is_done && 'gantt-bar-done',
+                    !stage.is_done && stage.is_overdue && 'gantt-bar-overdue',
+                    violated && 'gantt-bar-violated',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   style={barStyle(stage)}
                   title={`${stage.start_date} — ${stage.end_date} (${stage.duration_days} дн.)${
                     stage.depends_on_id ? '\nНачало определяется предшественником' : ''

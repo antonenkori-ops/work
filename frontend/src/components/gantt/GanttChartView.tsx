@@ -101,6 +101,15 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
     }
   }
 
+  async function handleToggleDone(stageId: number, done: boolean) {
+    try {
+      await updateGanttStage(stageId, { done })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   if (!chart) {
     return (
       <div className="page">
@@ -157,6 +166,7 @@ export default function GanttChartView({ chartId, onBack, onDeleted }: Props) {
         onDelete={handleDeleteStage}
         onDatesChange={handleDatesChange}
         onReorder={handleReorder}
+        onToggleDone={handleToggleDone}
       />
     </div>
   )

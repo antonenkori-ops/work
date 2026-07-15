@@ -68,6 +68,7 @@ class GanttStageUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     depends_on_id: int | None = None
+    done: bool | None = None
 
 
 class GanttReorderIn(BaseModel):
@@ -82,9 +83,11 @@ class GanttStageOut(BaseModel):
     depends_on_id: int | None
     name: str
     task_key: str | None
+    task_status_category: str | None
     start_date: date
     end_date: date
     sort_order: int
+    done: bool
 
     @computed_field
     @property
@@ -97,6 +100,18 @@ class GanttStageOut(BaseModel):
     @property
     def duration_days(self) -> int:
         return (self.end_date - self.start_date).days + 1
+
+    @computed_field
+    @property
+    def is_done(self) -> bool:
+        if self.task_status_category is not None:
+            return self.task_status_category == "done"
+        return self.done
+
+    @computed_field
+    @property
+    def is_overdue(self) -> bool:
+        return not self.is_done and self.end_date < date.today()
 
 
 class GanttChartCreate(BaseModel):

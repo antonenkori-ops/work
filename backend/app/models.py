@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -80,8 +80,12 @@ class GanttStage(Base):
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     sort_order = Column(Integer, nullable=False, default=0)
+    # Ручная отметка выполнения — имеет смысл только для этапов без task_key
+    # (у этапов, привязанных к Jira, готовность определяется статусом задачи).
+    done = Column(Boolean, nullable=False, default=False)
 
     chart = relationship("GanttChart", back_populates="stages")
+    task = relationship("Task")
     children = relationship(
         "GanttStage",
         back_populates="parent",
@@ -92,3 +96,7 @@ class GanttStage(Base):
     parent = relationship(
         "GanttStage", back_populates="children", remote_side=[id], foreign_keys=[parent_id]
     )
+
+    @property
+    def task_status_category(self) -> str | None:
+        return self.task.status_category if self.task is not None else None

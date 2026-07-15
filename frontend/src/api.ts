@@ -47,11 +47,15 @@ export interface GanttStage {
   depends_on_id: number | null
   name: string
   task_key: string | null
+  task_status_category: string | null
   jira_url: string | null
   start_date: string
   end_date: string
   sort_order: number
   duration_days: number
+  done: boolean
+  is_done: boolean
+  is_overdue: boolean
 }
 
 export interface GanttChart {
@@ -79,6 +83,7 @@ export interface GanttStageUpdateInput {
   start_date?: string
   end_date?: string
   depends_on_id?: number | null
+  done?: boolean
 }
 
 async function handle<T>(resp: Response): Promise<T> {
@@ -101,6 +106,10 @@ async function handle<T>(resp: Response): Promise<T> {
 
 export function fetchTasks(): Promise<Task[]> {
   return fetch(`${API_BASE}/tasks`).then((r) => handle<Task[]>(r))
+}
+
+export function fetchAvailableGanttTasks(): Promise<Task[]> {
+  return fetch(`${API_BASE}/gantt/available-tasks`).then((r) => handle<Task[]>(r))
 }
 
 export function fetchStats(): Promise<Stats> {
