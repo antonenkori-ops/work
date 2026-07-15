@@ -65,47 +65,7 @@ export default function HomePage({ onOpenChart }: Props) {
       {error && <div className="error-banner">Ошибка: {error}</div>}
       {loading && <div>Загрузка…</div>}
 
-      <div className="widgets-grid">
-        <div className="widget">
-          <h2>Что делать сегодня</h2>
-          {overdue.length === 0 && activeToday.length === 0 ? (
-            <div className="empty-state">На сегодня активных этапов нет.</div>
-          ) : (
-            <>
-              {overdue.length > 0 && (
-                <div className="widget-section">
-                  <div className="widget-section-title widget-section-overdue">Просрочено</div>
-                  {overdue.map((s) => (
-                    <div className="widget-row" key={`overdue-${s.chartId}-${s.id}`}>
-                      <span className="widget-row-link" onClick={() => onOpenChart(s.chartId)}>
-                        {s.name}
-                      </span>
-                      <span className="widget-row-meta">
-                        {s.chartTitle} · просрочено на {daysBetweenISO(s.end_date, today)} дн.
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {activeToday.length > 0 && (
-                <div className="widget-section">
-                  <div className="widget-section-title">В работе сегодня</div>
-                  {activeToday.map((s) => (
-                    <div className="widget-row" key={`active-${s.chartId}-${s.id}`}>
-                      <span className="widget-row-link" onClick={() => onOpenChart(s.chartId)}>
-                        {s.name}
-                      </span>
-                      <span className="widget-row-meta">
-                        {s.chartTitle} · осталось {daysBetweenISO(today, s.end_date) + 1} дн.
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
+      <div className="widgets-top-row">
         <div className="widget">
           <h2>Jira</h2>
           {stats && (
@@ -135,6 +95,46 @@ export default function HomePage({ onOpenChart }: Props) {
             ))
           )}
         </div>
+      </div>
+
+      <div className="widget widget-today">
+        <h2>Что делать сегодня</h2>
+        {overdue.length === 0 && activeToday.length === 0 ? (
+          <div className="empty-state">На сегодня активных этапов нет.</div>
+        ) : (
+          <>
+            {overdue.length > 0 && (
+              <div className="widget-section">
+                <div className="widget-section-title widget-section-overdue">Просрочено</div>
+                {overdue.map((s) => (
+                  <div className="widget-row" key={`overdue-${s.chartId}-${s.id}`}>
+                    <span className="widget-row-link" onClick={() => onOpenChart(s.chartId)}>
+                      {s.name}
+                    </span>
+                    <span className="widget-row-meta">
+                      {s.chartTitle} · просрочено на {daysBetweenISO(s.end_date, today)} дн.
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeToday.length > 0 && (
+              <div className="widget-section">
+                <div className="widget-section-title">В работе сегодня</div>
+                {activeToday.map((s) => (
+                  <div className="widget-row" key={`active-${s.chartId}-${s.id}`}>
+                    <span className="widget-row-link" onClick={() => onOpenChart(s.chartId)}>
+                      {s.name}
+                    </span>
+                    <span className="widget-row-meta">
+                      {s.chartTitle} · осталось {daysBetweenISO(today, s.end_date) + 1} дн.
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

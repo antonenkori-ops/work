@@ -423,7 +423,7 @@ button:disabled {
 }
 
 .gantt-label-col {
-  width: 260px;
+  width: 420px;
   flex-shrink: 0;
   padding-right: 8px;
   font-size: 13px;
@@ -579,11 +579,12 @@ button:disabled {
 
 /* Виджеты главной страницы */
 
-.widgets-grid {
+.widgets-top-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   align-items: start;
+  margin-bottom: 16px;
 }
 
 .widget {
@@ -591,6 +592,16 @@ button:disabled {
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.widget-today {
+  width: 100%;
+}
+
+.widget-today .widget-row-link {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .widget h2 {
