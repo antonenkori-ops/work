@@ -7,10 +7,16 @@ import {
   ReleaseTicketKind,
 } from '../../api'
 import AdminPicker from './AdminPicker'
+import AcSystemPicker from './AcSystemPicker'
 import { TICKET_KIND_LABELS } from './ticketKinds'
 
 interface Props {
   onOpen: (releaseId: number) => void
+}
+
+function releaseDisplayName(release: Release): string {
+  const sprint = release.tickets.find((t) => t.kind === 'sprint')
+  return sprint ? sprint.label : release.title
 }
 
 const KIND_OPTIONS: { id: string; label: string; enabled: boolean }[] = [
@@ -137,13 +143,8 @@ export default function ReleaseList({ onOpen }: Props) {
           </div>
 
           <label className="stage-form-field">
-            Название релиза
-            <input
-              type="text"
-              placeholder="Веб-сайт Сбербанка России"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            АС (название системы)
+            <AcSystemPicker value={title} onChange={setTitle} />
           </label>
 
           <label className="stage-form-field">
@@ -224,10 +225,10 @@ export default function ReleaseList({ onOpen }: Props) {
         <div className="chart-list">
           {releases.map((release) => (
             <div className="chart-list-item" key={release.id} onClick={() => onOpen(release.id)}>
-              <div className="chart-list-title">{release.title}</div>
+              <div className="chart-list-title">{releaseDisplayName(release)}</div>
               <div className="chart-list-meta">
-                {KIND_OPTIONS.find((k) => k.id === release.kind)?.label ?? release.kind} ·{' '}
-                {release.item_count} пункт(ов) · создан{' '}
+                {release.title} · {KIND_OPTIONS.find((k) => k.id === release.kind)?.label ?? release.kind}{' '}
+                · {release.item_count} пункт(ов) · создан{' '}
                 {new Date(release.created_at).toLocaleDateString('ru-RU')}
               </div>
               <button

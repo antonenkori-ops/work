@@ -250,6 +250,7 @@ class ReleaseItemOut(BaseModel):
     end_at: datetime | None
     depends_on_id: int | None
     executor: str | None
+    executor_display: str | None = None
     comment: str | None
     marker_at: datetime | None
     sort_order: int
@@ -292,6 +293,17 @@ class ReleaseAdminCreate(BaseModel):
 
 
 class ReleaseAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class ReleaseAcSystemCreate(BaseModel):
+    name: str
+
+
+class ReleaseAcSystemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

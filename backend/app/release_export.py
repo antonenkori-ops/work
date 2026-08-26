@@ -50,6 +50,8 @@ TITLE_FONT = Font(bold=True, size=16)
 SECTION_FONT = Font(bold=True, size=14)
 HEADER_FONT = Font(bold=True, size=11, color="FFFFFFFF")
 BODY_FONT = Font(size=11)
+TOTAL_FONT = Font(bold=True, size=11)
+TOTAL_FILL = PatternFill("solid", fgColor="FFF3F4F6")
 WRAP_TOP = Alignment(wrap_text=True, vertical="top")
 WRAP_CENTER = Alignment(wrap_text=True, vertical="center", horizontal="center")
 
@@ -105,7 +107,7 @@ def build_workbook(release: ReleasePlan) -> Workbook:
         ws.column_dimensions[chr(64 + col)].width = width
 
     row = 1
-    title_lines = [release.title]
+    title_lines = [f"План работ по внедрению релиза {release.title}"]
     for ticket in sorted(release.tickets, key=lambda t: t.sort_order):
         title_lines.append(f"{ticket.label} ({ticket.key})")
     _write_merged(ws, row, "\n".join(title_lines), TITLE_FONT)
@@ -153,7 +155,7 @@ def build_workbook(release: ReleasePlan) -> Workbook:
                 "",  # Начало (факт) — заполняется вручную вторым администратором
                 "",  # Конец (факт)
                 "",  # Время (факт)
-                item.executor or "",
+                getattr(item, "executor_display", None) or item.executor or "",
                 getattr(item, "comment_display", None) or item.comment or "",
             ]
             for col, value in enumerate(values, start=1):
@@ -161,6 +163,20 @@ def build_workbook(release: ReleasePlan) -> Workbook:
                 cell.font = BODY_FONT
                 cell.border = BORDER
                 cell.alignment = WRAP_CENTER if col in (1, 3, 4, 5, 6, 7, 8, 9) else WRAP_TOP
+            row += 1
+
+        work_minutes = sum(i.duration_minutes or 0 for i in items if i.item_type == "work")
+        if any(i.item_type == "work" for i in items):
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+            label_cell = ws.cell(row=row, column=1, value="Итого по разделу")
+            label_cell.font = TOTAL_FONT
+            label_cell.alignment = WRAP_CENTER
+            dur_cell = ws.cell(row=row, column=4, value=_fmt_duration(work_minutes))
+            dur_cell.font = TOTAL_FONT
+            dur_cell.alignment = WRAP_CENTER
+            for col in range(1, NUM_COLUMNS + 1):
+                ws.cell(row=row, column=col).border = BORDER
+                ws.cell(row=row, column=col).fill = TOTAL_FILL
             row += 1
 
         if section == "rollback" and release.rollback_note:

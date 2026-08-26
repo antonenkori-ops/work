@@ -220,3 +220,13 @@ class ReleaseAdmin(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
+
+
+class ReleaseAcSystem(Base):
+    """Справочник АС (автоматизированных систем) для шапки плана — заголовок
+    документа собирается как "План работ по внедрению релиза {name}"."""
+
+    __tablename__ = "release_ac_systems"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)

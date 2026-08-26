@@ -20,16 +20,10 @@ from app.models import (
     ReleaseTicket,
 )
 
-TEAM_MAIN = (
-    'Группа сопровождения УСС ДИТ "GR, правовые вопросы, комплаенс и ДЗО", УВА, ДМиК, БСР\n'
-    "(Антоненко Р.И., Писарьков М.В.)"
-)
-TEAM_PREP = (
-    'Группа сопровождения УСС ДИТ "GR, правовые вопросы, комплаенс и ДЗО", УВА, ДМиК, БСР\n'
-    "(Антоненко Р.И.)"
-)
+TEAM_MAIN = "ДИТ ДМиК. Сопровождение АС ГАК Технологии маркетинга\n({{main_admin}}, {{second_admin}})"
+TEAM_PREP = "ДИТ ДМиК. Сопровождение АС ГАК Технологии маркетинга\n({{main_admin}})"
 
-DEFAULT_TITLE = "Веб-сайт Сбербанка России"
+DEFAULT_TITLE = "АС Веб-сайт Сбербанк России"
 DEFAULT_MAIN_ADMIN = "Антоненко Р.И."
 DEFAULT_SECOND_ADMIN = "Писарьков М.В."
 
@@ -85,21 +79,15 @@ PREP_ITEMS = [
         comment=None,
     ),
     dict(
-        title="Оповещение сотрудников дежурных смен о предстоящем внедрении",
-        duration_minutes=30,
-        executor=TEAM_PREP,
-        comment=None,
-    ),
-    dict(
         title="Публикация объявления на портале",
         duration_minutes=30,
-        executor="ДС Блока GR",
+        executor=TEAM_PREP,
         comment=(
             "‼️⚙️Запланированы работы.\n"
-            "[{{sprint_key}}] {{sprint_label}}\n"
-            "[{{bundle_key}}] {{bundle_label}}\n"
+            "{{sprint_link}} {{sprint_label}}\n"
+            "{{bundle_link}} {{bundle_label}}\n"
             "Компоненты: см. тикет\n"
-            "Дата и время: см. план\n"
+            "Дата и время: {{main_window}}\n"
             "Влияние: не планируется\n"
             "Просьба воздержаться от работы в административных консолях сайта "
             "в период проведения работ"

@@ -1,13 +1,15 @@
-import { FormEvent, useState } from 'react'
+import { DragEvent as ReactDragEvent, FormEvent, useRef, useState } from 'react'
 import {
   addReleaseItem,
   deleteReleaseItem,
+  moveReleaseItemDown,
+  moveReleaseItemUp,
   Release,
   ReleaseItem,
-  ReleaseItemUpdateInput,
   ReleaseSection,
   updateReleaseItem,
 } from '../../api'
+import EditableField from './EditableField'
 
 interface Props {
   release: Release
@@ -42,7 +44,7 @@ function fmtDuration(minutes: number | null): string {
   return `${h}:${String(m).padStart(2, '0')}`
 }
 
-interface ItemFormState {
+interface AddFormState {
   title: string
   durationMinutes: string
   dependsOn: string
@@ -53,7 +55,7 @@ interface ItemFormState {
   moduleSetId: string
 }
 
-function emptyForm(release: Release, itemType: 'work' | 'marker'): ItemFormState {
+function emptyAddForm(release: Release, itemType: 'work' | 'marker'): AddFormState {
   return {
     title: '',
     durationMinutes: '',
@@ -66,51 +68,26 @@ function emptyForm(release: Release, itemType: 'work' | 'marker'): ItemFormState
   }
 }
 
-function formFromItem(item: ReleaseItem): ItemFormState {
-  return {
-    title: item.title,
-    durationMinutes: item.duration_minutes != null ? String(item.duration_minutes) : '',
-    dependsOn: item.depends_on_id != null ? String(item.depends_on_id) : '',
-    startAt: toDatetimeLocal(item.start_at),
-    executor: item.executor ?? '',
-    comment: item.comment ?? '',
-    markerAt: toDatetimeLocal(item.marker_at),
-    moduleSetId: item.module_set_id != null ? String(item.module_set_id) : '',
-  }
-}
-
 export default function ReleaseSectionTable({ release, section, label, onChange, onError }: Props) {
   const items = release.items
     .filter((i) => i.section === section)
     .sort((a, b) => a.sort_order - b.sort_order)
 
-  const dependencyOptions = release.items.filter((i) => i.item_type === 'work')
-
   const [addingType, setAddingType] = useState<'work' | 'marker' | null>(null)
-  const [addForm, setAddForm] = useState<ItemFormState>(emptyForm(release, 'work'))
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<ItemFormState>(emptyForm(release, 'work'))
+  const [addForm, setAddForm] = useState<AddFormState>(emptyAddForm(release, 'work'))
+  const dragItemId = useRef<number | null>(null)
+  const [dropBeforeId, setDropBeforeId] = useState<number | null>(null)
 
   const workItems = items.filter((i) => i.item_type === 'work')
-  const firstWorkItem = workItems[0] ?? null
-
-  async function saveSectionStart(value: string) {
-    if (!firstWorkItem) return
-    try {
-      onChange(await updateReleaseItem(firstWorkItem.id, { start_at: value || null }))
-    } catch (err) {
-      onError(err)
-    }
-  }
+  const totalMinutes = workItems.reduce((sum, i) => sum + (i.duration_minutes ?? 0), 0)
 
   function startAdd(type: 'work' | 'marker') {
     setAddingType(type)
-    const base = emptyForm(release, type)
+    const base = emptyAddForm(release, type)
     if (type === 'work' && workItems.length > 0) {
       base.dependsOn = String(workItems[workItems.length - 1].id)
     }
     setAddForm(base)
-    setEditingId(null)
   }
 
   async function submitAdd(e: FormEvent) {
@@ -141,38 +118,6 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
     }
   }
 
-  function startEdit(item: ReleaseItem) {
-    setEditingId(item.id)
-    setEditForm(formFromItem(item))
-    setAddingType(null)
-  }
-
-  async function submitEdit(e: FormEvent, item: ReleaseItem) {
-    e.preventDefault()
-    try {
-      const payload: ReleaseItemUpdateInput = {
-        title: editForm.title.trim(),
-        executor: editForm.executor.trim() || undefined,
-        comment: editForm.comment.trim() || undefined,
-      }
-      if (item.item_type === 'marker') {
-        payload.marker_at = editForm.markerAt || null
-      } else {
-        payload.duration_minutes = editForm.durationMinutes !== '' ? Number(editForm.durationMinutes) : null
-        payload.depends_on_id = editForm.dependsOn ? Number(editForm.dependsOn) : null
-        if (!editForm.dependsOn) {
-          payload.start_at = editForm.startAt || null
-        }
-        payload.module_set_id = editForm.moduleSetId ? Number(editForm.moduleSetId) : null
-      }
-      const released = await updateReleaseItem(item.id, payload)
-      onChange(released)
-      setEditingId(null)
-    } catch (err) {
-      onError(err)
-    }
-  }
-
   async function handleDelete(itemId: number) {
     if (!confirm('Удалить пункт?')) return
     try {
@@ -182,38 +127,79 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
     }
   }
 
+  async function patchItem(itemId: number, payload: Parameters<typeof updateReleaseItem>[1]) {
+    try {
+      onChange(await updateReleaseItem(itemId, payload))
+    } catch (err) {
+      onError(err)
+    }
+  }
+
   function moduleSetFor(item: ReleaseItem) {
     return release.module_sets.find((s) => s.id === item.module_set_id) ?? null
   }
 
+  // --- перетаскивание строк мышкой (смена порядка внутри раздела) ---
+
+  function handleDragStart(e: ReactDragEvent, itemId: number) {
+    dragItemId.current = itemId
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(itemId))
+  }
+
+  function handleDragOverRow(e: ReactDragEvent, itemId: number) {
+    if (dragItemId.current == null || dragItemId.current === itemId) return
+    e.preventDefault()
+    setDropBeforeId(itemId)
+  }
+
+  async function moveItemToIndex(itemId: number, fromIndex: number, toIndex: number) {
+    const steps = toIndex - fromIndex
+    if (steps === 0) return
+    try {
+      let released: Release | undefined
+      for (let i = 0; i < Math.abs(steps); i++) {
+        released = await (steps < 0 ? moveReleaseItemUp(itemId) : moveReleaseItemDown(itemId))
+      }
+      if (released) onChange(released)
+    } catch (err) {
+      onError(err)
+    }
+  }
+
+  async function handleDropOnRow(e: ReactDragEvent, targetId: number) {
+    e.preventDefault()
+    setDropBeforeId(null)
+    const draggedId = dragItemId.current
+    dragItemId.current = null
+    if (draggedId == null || draggedId === targetId) return
+    const fromIndex = items.findIndex((i) => i.id === draggedId)
+    const toIndex = items.findIndex((i) => i.id === targetId)
+    if (fromIndex === -1 || toIndex === -1) return
+    await moveItemToIndex(draggedId, fromIndex, toIndex)
+  }
+
+  async function handleDropAtEnd(e: ReactDragEvent) {
+    e.preventDefault()
+    setDropBeforeId(null)
+    const draggedId = dragItemId.current
+    dragItemId.current = null
+    if (draggedId == null) return
+    const fromIndex = items.findIndex((i) => i.id === draggedId)
+    if (fromIndex === -1) return
+    await moveItemToIndex(draggedId, fromIndex, items.length - 1)
+  }
+
   return (
     <section className="release-section">
-      <div className="release-section-header">
-        <h2 className="release-section-title">{label}</h2>
-        {firstWorkItem && firstWorkItem.depends_on_id == null && (
-          <label className="release-section-start">
-            Начало раздела (план)
-            <input
-              type="datetime-local"
-              defaultValue={toDatetimeLocal(firstWorkItem.start_at)}
-              key={`section-start-${firstWorkItem.id}-${firstWorkItem.start_at ?? ''}`}
-              onBlur={(e) => saveSectionStart(e.target.value)}
-            />
-          </label>
-        )}
-        {firstWorkItem && firstWorkItem.depends_on_id != null && (
-          <span className="release-section-start-hint">
-            Начало считается автоматически от пункта, от которого зависит первый пункт раздела
-          </span>
-        )}
-      </div>
+      <h2 className="release-section-title">{label}</h2>
       <div className="release-table-wrap">
         <table className="release-table">
           <thead>
             <tr>
+              <th></th>
               <th>№</th>
               <th>Работы</th>
-              <th>Зависит от №</th>
               <th>Продолжительность</th>
               <th>Начало (план)</th>
               <th>Конец (план)</th>
@@ -224,122 +210,43 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
           </thead>
           <tbody>
             {items.map((item) => {
-              if (editingId === item.id) {
-                return (
-                  <tr key={item.id} className="release-row-editing">
-                    <td colSpan={9}>
-                      <form className="release-item-form" onSubmit={(e) => submitEdit(e, item)}>
-                        <textarea
-                          placeholder="Текст работы"
-                          value={editForm.title}
-                          onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                          rows={3}
-                        />
-                        {item.item_type === 'marker' ? (
-                          <label className="stage-form-field">
-                            Дата и время маркера
-                            <input
-                              type="datetime-local"
-                              value={editForm.markerAt}
-                              onChange={(e) => setEditForm({ ...editForm, markerAt: e.target.value })}
-                            />
-                          </label>
-                        ) : (
-                          <>
-                            <select
-                              value={editForm.dependsOn}
-                              onChange={(e) => setEditForm({ ...editForm, dependsOn: e.target.value })}
-                            >
-                              <option value="">Не зависит от других пунктов</option>
-                              {dependencyOptions
-                                .filter((d) => d.id !== item.id)
-                                .map((d) => (
-                                  <option key={d.id} value={d.id}>
-                                    №{d.number} {d.title.slice(0, 40)}
-                                  </option>
-                                ))}
-                            </select>
-                            <label className="stage-form-field">
-                              Начало
-                              <input
-                                type="datetime-local"
-                                disabled={!!editForm.dependsOn}
-                                title={
-                                  editForm.dependsOn
-                                    ? 'Определяется автоматически по завершении предшественника'
-                                    : ''
-                                }
-                                value={editForm.startAt}
-                                onChange={(e) => setEditForm({ ...editForm, startAt: e.target.value })}
-                              />
-                            </label>
-                            <label className="stage-form-field">
-                              Продолжительность, мин
-                              <input
-                                type="number"
-                                min={0}
-                                value={editForm.durationMinutes}
-                                onChange={(e) =>
-                                  setEditForm({ ...editForm, durationMinutes: e.target.value })
-                                }
-                              />
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Отв. исполнитель"
-                              value={editForm.executor}
-                              onChange={(e) => setEditForm({ ...editForm, executor: e.target.value })}
-                            />
-                            <textarea
-                              placeholder="Комментарий"
-                              value={editForm.comment}
-                              onChange={(e) => setEditForm({ ...editForm, comment: e.target.value })}
-                              rows={2}
-                            />
-                            <label className="stage-form-field">
-                              Набор модулей
-                              <select
-                                value={editForm.moduleSetId}
-                                onChange={(e) =>
-                                  setEditForm({ ...editForm, moduleSetId: e.target.value })
-                                }
-                              >
-                                <option value="">— нет —</option>
-                                {release.module_sets.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name} ({s.entries.length})
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </>
-                        )}
-                        <div className="release-item-form-actions">
-                          <button type="submit">Сохранить</button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Отмена
-                          </button>
-                        </div>
-                      </form>
-                    </td>
-                  </tr>
-                )
-              }
+              const dragHandle = (
+                <span
+                  className="release-drag-handle"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item.id)}
+                  title="Перетащить, чтобы изменить порядок"
+                >
+                  ⠿
+                </span>
+              )
 
               if (item.item_type === 'marker') {
                 return (
-                  <tr key={item.id} className="release-marker-row">
-                    <td colSpan={8}>
-                      <strong>{fmtDateTime(item.marker_at)}</strong> — {item.title}
+                  <tr
+                    key={item.id}
+                    className={`release-marker-row${dropBeforeId === item.id ? ' release-row-drop-target' : ''}`}
+                    onDragOver={(e) => handleDragOverRow(e, item.id)}
+                    onDrop={(e) => handleDropOnRow(e, item.id)}
+                    onDragLeave={() => setDropBeforeId((id) => (id === item.id ? null : id))}
+                  >
+                    <td>{dragHandle}</td>
+                    <td colSpan={7}>
+                      <input
+                        type="datetime-local"
+                        defaultValue={toDatetimeLocal(item.marker_at)}
+                        key={`marker-at-${item.id}`}
+                        onBlur={(e) => patchItem(item.id, { marker_at: e.target.value || null })}
+                      />
+                      <EditableField
+                        multiline
+                        className="release-inline-textarea"
+                        raw={item.title}
+                        display={item.title_display || item.title}
+                        onSave={(value) => patchItem(item.id, { title: value })}
+                      />
                     </td>
                     <td className="release-row-actions">
-                      <button className="btn-secondary" onClick={() => startEdit(item)}>
-                        Изменить
-                      </button>
                       <button className="chart-delete-btn" onClick={() => handleDelete(item.id)}>
                         Удалить
                       </button>
@@ -349,15 +256,44 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
               }
 
               const moduleSet = moduleSetFor(item)
+              const isAnchor = item.depends_on_id == null
 
               return (
-                <tr key={item.id}>
+                <tr
+                  key={item.id}
+                  className={dropBeforeId === item.id ? 'release-row-drop-target' : ''}
+                  onDragOver={(e) => handleDragOverRow(e, item.id)}
+                  onDrop={(e) => handleDropOnRow(e, item.id)}
+                  onDragLeave={() => setDropBeforeId((id) => (id === item.id ? null : id))}
+                >
+                  <td>{dragHandle}</td>
                   <td className="release-col-number">{item.number}</td>
                   <td className="release-col-title">
-                    <div className="release-item-title">{item.title_display}</div>
+                    <EditableField
+                      multiline
+                      className="release-inline-textarea"
+                      raw={item.title}
+                      display={item.title_display || item.title}
+                      onSave={(value) => patchItem(item.id, { title: value })}
+                    />
+                    <select
+                      className="release-inline-module-select"
+                      value={item.module_set_id != null ? String(item.module_set_id) : ''}
+                      onChange={(e) =>
+                        patchItem(item.id, {
+                          module_set_id: e.target.value ? Number(e.target.value) : null,
+                        })
+                      }
+                    >
+                      <option value="">Модули: нет</option>
+                      {release.module_sets.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          Модули: {s.name} ({s.entries.length})
+                        </option>
+                      ))}
+                    </select>
                     {moduleSet && (
                       <div className="release-modules-readonly">
-                        Модули «{moduleSet.name}»:{' '}
                         {moduleSet.entries
                           .map((en) => (en.version ? `${en.name}:${en.version}` : en.name))
                           .join(', ')}
@@ -365,19 +301,53 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
                     )}
                   </td>
                   <td className="release-col-number">
-                    {item.depends_on_id
-                      ? dependencyOptions.find((d) => d.id === item.depends_on_id)?.number ?? ''
-                      : ''}
+                    <input
+                      type="number"
+                      min={0}
+                      className="release-inline-number"
+                      defaultValue={item.duration_minutes ?? ''}
+                      key={`duration-${item.id}`}
+                      placeholder="мин"
+                      onBlur={(e) =>
+                        patchItem(item.id, {
+                          duration_minutes: e.target.value !== '' ? Number(e.target.value) : null,
+                        })
+                      }
+                    />
                   </td>
-                  <td className="release-col-number">{fmtDuration(item.duration_minutes)}</td>
-                  <td className="release-col-datetime">{fmtDateTime(item.start_at)}</td>
+                  <td className="release-col-datetime">
+                    {isAnchor ? (
+                      <input
+                        type="datetime-local"
+                        className="release-inline-datetime"
+                        defaultValue={toDatetimeLocal(item.start_at)}
+                        key={`start-${item.id}-${item.start_at ?? ''}`}
+                        onBlur={(e) => patchItem(item.id, { start_at: e.target.value || null })}
+                      />
+                    ) : (
+                      fmtDateTime(item.start_at)
+                    )}
+                  </td>
                   <td className="release-col-datetime">{fmtDateTime(item.end_at)}</td>
-                  <td>{item.executor}</td>
-                  <td className="release-col-comment">{item.comment_display}</td>
+                  <td>
+                    <EditableField
+                      multiline
+                      className="release-inline-textarea release-inline-executor"
+                      raw={item.executor ?? ''}
+                      display={item.executor_display || item.executor || ''}
+                      onSave={(value) => patchItem(item.id, { executor: value || null })}
+                    />
+                  </td>
+                  <td className="release-col-comment">
+                    <EditableField
+                      multiline
+                      className="release-inline-textarea"
+                      raw={item.comment ?? ''}
+                      display={item.comment_display || item.comment || ''}
+                      onSave={(value) => patchItem(item.id, { comment: value || null })}
+                    />
+                  </td>
                   <td className="release-row-actions">
-                    <button className="btn-secondary" onClick={() => startEdit(item)}>
-                      Изменить
-                    </button>
                     <button className="chart-delete-btn" onClick={() => handleDelete(item.id)}>
                       Удалить
                     </button>
@@ -385,6 +355,19 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
                 </tr>
               )
             })}
+
+            <tr
+              className={`release-drop-end${dropBeforeId === -1 ? ' release-row-drop-target' : ''}`}
+              onDragOver={(e) => {
+                if (dragItemId.current == null) return
+                e.preventDefault()
+                setDropBeforeId(-1)
+              }}
+              onDrop={handleDropAtEnd}
+              onDragLeave={() => setDropBeforeId((id) => (id === -1 ? null : id))}
+            >
+              <td colSpan={9} />
+            </tr>
 
             {addingType && (
               <tr className="release-row-editing">
@@ -408,17 +391,20 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
                       </label>
                     ) : (
                       <>
-                        <select
-                          value={addForm.dependsOn}
-                          onChange={(e) => setAddForm({ ...addForm, dependsOn: e.target.value })}
-                        >
-                          <option value="">Не зависит от других пунктов</option>
-                          {dependencyOptions.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              №{d.number} {d.title.slice(0, 40)}
-                            </option>
-                          ))}
-                        </select>
+                        <label className="stage-form-field">
+                          Зависит от пункта
+                          <select
+                            value={addForm.dependsOn}
+                            onChange={(e) => setAddForm({ ...addForm, dependsOn: e.target.value })}
+                          >
+                            <option value="">Не зависит от других пунктов</option>
+                            {workItems.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                №{d.number} {d.title.slice(0, 40)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <label className="stage-form-field">
                           Начало
                           <input
@@ -481,6 +467,14 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
                 </td>
               </tr>
             )}
+
+            {workItems.length > 0 && (
+              <tr className="release-total-row">
+                <td colSpan={3}>Итого по разделу</td>
+                <td className="release-col-number">{fmtDuration(totalMinutes)}</td>
+                <td colSpan={5}></td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -489,9 +483,6 @@ export default function ReleaseSectionTable({ release, section, label, onChange,
         <div className="release-section-add-buttons">
           <button className="btn-secondary" onClick={() => startAdd('work')}>
             + Добавить пункт
-          </button>
-          <button className="btn-secondary" onClick={() => startAdd('marker')}>
-            + Добавить маркер
           </button>
         </div>
       )}

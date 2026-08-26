@@ -12,6 +12,7 @@ import {
   updateReleaseTicket,
 } from '../../api'
 import AdminPicker from './AdminPicker'
+import AcSystemPicker from './AcSystemPicker'
 import ReleaseSectionTable from './ReleaseSectionTable'
 import ReleaseRisksTable from './ReleaseRisksTable'
 import ReleaseModuleSets from './ReleaseModuleSets'
@@ -156,14 +157,12 @@ export default function ReleaseDetail({ releaseId, onBack, onDeleted }: Props) {
 
       <div className="release-header-card">
         <label className="stage-form-field release-title-field">
-          Название релиза
-          <input
-            type="text"
-            defaultValue={release.title}
-            key={`title-${release.id}`}
-            onBlur={(e) => saveHeaderField('title', e.target.value)}
-          />
+          АС (название системы)
+          <AcSystemPicker value={release.title} onChange={(name) => saveHeaderField('title', name)} />
         </label>
+        <div className="release-title-preview">
+          Заголовок в документе: «План работ по внедрению релиза {release.title}»
+        </div>
 
         <div className="release-tickets">
           <div className="release-tickets-label">Номера в Jira</div>

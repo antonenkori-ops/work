@@ -1,11 +1,25 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
+from app.models import ReleaseAcSystem
 from app.routers import gantt, releases, stats, tasks
 
 Base.metadata.create_all(bind=engine)
+
+DEFAULT_AC_SYSTEMS = [
+    "АС Веб-сайт Сбербанк России",
+    "Короткие ссылки",
+    "SberLive",
+]
+
+with SessionLocal() as _db:
+    if _db.execute(select(ReleaseAcSystem)).first() is None:
+        for _name in DEFAULT_AC_SYSTEMS:
+            _db.add(ReleaseAcSystem(name=_name))
+        _db.commit()
 
 app = FastAPI(title="Work Assistant API")
 

@@ -207,6 +207,7 @@ export interface ReleaseItem {
   end_at: string | null
   depends_on_id: number | null
   executor: string | null
+  executor_display: string | null
   comment: string | null
   marker_at: string | null
   sort_order: number
@@ -319,6 +320,19 @@ export function addReleaseAdmin(name: string): Promise<ReleaseAdmin> {
   return jsonRequest(`${API_BASE}/releases/admins`, 'POST', { name })
 }
 
+export interface ReleaseAcSystem {
+  id: number
+  name: string
+}
+
+export function fetchAcSystems(): Promise<ReleaseAcSystem[]> {
+  return jsonRequest(`${API_BASE}/releases/ac-systems`, 'GET')
+}
+
+export function addAcSystem(name: string): Promise<ReleaseAcSystem> {
+  return jsonRequest(`${API_BASE}/releases/ac-systems`, 'POST', { name })
+}
+
 export function addReleaseTicket(
   releaseId: number,
   label: string,
@@ -351,6 +365,14 @@ export function updateReleaseItem(
   input: ReleaseItemUpdateInput,
 ): Promise<Release> {
   return jsonRequest(`${API_BASE}/releases/items/${itemId}`, 'PATCH', input)
+}
+
+export function moveReleaseItemUp(itemId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/items/${itemId}/move-up`, 'POST')
+}
+
+export function moveReleaseItemDown(itemId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/items/${itemId}/move-down`, 'POST')
 }
 
 export function deleteReleaseItem(itemId: number): Promise<Release> {

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import (
+    ReleaseAcSystem,
     ReleaseAdmin,
     ReleaseItem,
     ReleaseModuleSet,
@@ -21,6 +22,8 @@ from app.release_export import build_workbook
 from app.release_placeholders import build_placeholder_map, resolve_text
 from app.release_templates import DEFAULT_TITLE, seed_planned_release
 from app.schemas import (
+    ReleaseAcSystemCreate,
+    ReleaseAcSystemOut,
     ReleaseAdminCreate,
     ReleaseAdminOut,
     ReleaseCreate,
@@ -75,6 +78,7 @@ def _resolve_placeholders(release: ReleasePlan) -> None:
     for item in release.items:
         item.title_display = resolve_text(item.title, placeholders) or ""
         item.comment_display = resolve_text(item.comment, placeholders)
+        item.executor_display = resolve_text(item.executor, placeholders)
 
 
 def _load_release(db: Session, release_id: int) -> ReleasePlan:
@@ -160,14 +164,20 @@ def _cascade_dependents(db: Session, item: ReleaseItem, visited: set[int]) -> No
         _cascade_dependents(db, dependent, visited)
 
 
-def _clear_dangling_dependencies(db: Session, removed_ids: set[int]) -> None:
-    if not removed_ids:
-        return
-    stmt = select(ReleaseItem).where(ReleaseItem.depends_on_id.in_(removed_ids))
-    for item in db.execute(stmt).scalars().all():
-        if item.id not in removed_ids:
-            item.depends_on_id = None
-            _recompute_schedule(item, None)
+def _splice_out_item(db: Session, item: ReleaseItem) -> None:
+    """При удалении пункта его "дети" (кто на него зависел) переподключаются
+    на его предшественника — иначе цепочка рвётся и время дальше по плану
+    перестаёт пересчитываться."""
+    predecessor = db.get(ReleaseItem, item.depends_on_id) if item.depends_on_id else None
+    dependents = db.execute(
+        select(ReleaseItem).where(ReleaseItem.depends_on_id == item.id)
+    ).scalars().all()
+    for dependent in dependents:
+        dependent.depends_on_id = predecessor.id if predecessor else None
+        _recompute_schedule(dependent, predecessor)
+    db.flush()
+    for dependent in dependents:
+        _cascade_dependents(db, dependent, {dependent.id})
 
 
 # --- Releases -------------------------------------------------------------
@@ -233,6 +243,29 @@ def add_admin(payload: ReleaseAdminCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(admin)
     return admin
+
+
+@router.get("/ac-systems", response_model=list[ReleaseAcSystemOut])
+def list_ac_systems(db: Session = Depends(get_db)):
+    stmt = select(ReleaseAcSystem).order_by(ReleaseAcSystem.name)
+    return db.execute(stmt).scalars().all()
+
+
+@router.post("/ac-systems", response_model=ReleaseAcSystemOut)
+def add_ac_system(payload: ReleaseAcSystemCreate, db: Session = Depends(get_db)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Укажите название АС")
+    existing = db.execute(
+        select(ReleaseAcSystem).where(ReleaseAcSystem.name == name)
+    ).scalar_one_or_none()
+    if existing:
+        return existing
+    ac_system = ReleaseAcSystem(name=name)
+    db.add(ac_system)
+    db.commit()
+    db.refresh(ac_system)
+    return ac_system
 
 
 @router.get("/{release_id}", response_model=ReleaseOut)
@@ -423,11 +456,78 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     item = _get_item(db, item_id)
     release_id = item.release_id
     release = db.get(ReleasePlan, release_id)
-    _clear_dangling_dependencies(db, {item.id})
+    if item.item_type == "work":
+        _splice_out_item(db, item)
     db.delete(item)
     _touch(release)
     db.commit()
     return _load_release(db, release_id)
+
+
+def _swap_items(db: Session, first: ReleaseItem, second: ReleaseItem) -> None:
+    """first и second — соседние по sort_order пункты одного раздела, first сейчас
+    идёт раньше second. Меняет их местами: переставляет sort_order и, если second
+    напрямую зависел от first (обычная последовательная цепочка), переподключает
+    зависимости под новый порядок — иначе после перестановки график остался бы
+    посчитан как для старого порядка."""
+    first.sort_order, second.sort_order = second.sort_order, first.sort_order
+
+    if second.item_type == "work" and first.item_type == "work" and second.depends_on_id == first.id:
+        old_predecessor_id = first.depends_on_id
+        old_predecessor = db.get(ReleaseItem, old_predecessor_id) if old_predecessor_id else None
+        for dependent in db.execute(
+            select(ReleaseItem).where(ReleaseItem.depends_on_id == second.id)
+        ).scalars().all():
+            dependent.depends_on_id = first.id
+
+        if old_predecessor is None:
+            # first был "якорем" раздела (время начала задано вручную через
+            # "Начало раздела") — это время начала должно остаться прежним,
+            # просто теперь его несёт second, занявший первое место.
+            second.start_at = first.start_at
+
+        second.depends_on_id = old_predecessor_id
+        first.depends_on_id = second.id
+        db.flush()
+
+        _recompute_schedule(second, old_predecessor)
+        _recompute_schedule(first, second)
+        _cascade_dependents(db, first, {first.id, second.id})
+
+
+def _move_item(db: Session, item_id: int, direction: int) -> ReleasePlan:
+    item = _get_item(db, item_id)
+    release_id = item.release_id
+    siblings = sorted(
+        db.execute(
+            select(ReleaseItem).where(
+                ReleaseItem.release_id == release_id, ReleaseItem.section == item.section
+            )
+        ).scalars().all(),
+        key=lambda i: i.sort_order,
+    )
+    index = next(i for i, s in enumerate(siblings) if s.id == item.id)
+    neighbor_index = index + direction
+    if 0 <= neighbor_index < len(siblings):
+        neighbor = siblings[neighbor_index]
+        if direction < 0:
+            _swap_items(db, neighbor, item)
+        else:
+            _swap_items(db, item, neighbor)
+        release = db.get(ReleasePlan, release_id)
+        _touch(release)
+        db.commit()
+    return _load_release(db, release_id)
+
+
+@router.post("/items/{item_id}/move-up", response_model=ReleaseOut)
+def move_item_up(item_id: int, db: Session = Depends(get_db)):
+    return _move_item(db, item_id, -1)
+
+
+@router.post("/items/{item_id}/move-down", response_model=ReleaseOut)
+def move_item_down(item_id: int, db: Session = Depends(get_db)):
+    return _move_item(db, item_id, 1)
 
 
 @router.post("/{release_id}/items/reorder", response_model=ReleaseOut)
