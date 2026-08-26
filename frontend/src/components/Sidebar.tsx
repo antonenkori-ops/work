@@ -1,4 +1,4 @@
-export type View = 'home' | 'jira' | 'gantt'
+export type View = 'home' | 'jira' | 'gantt' | 'releases'
 
 interface Item {
   id: View
@@ -9,6 +9,7 @@ const ITEMS: Item[] = [
   { id: 'home', label: 'Главная' },
   { id: 'jira', label: 'Jira' },
   { id: 'gantt', label: 'Диаграммы Ганта' },
+  { id: 'releases', label: 'Релизы' },
 ]
 
 interface Props {

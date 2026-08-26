@@ -3,6 +3,7 @@ import Sidebar, { View } from './components/Sidebar'
 import HomePage from './pages/HomePage'
 import JiraPage from './pages/JiraPage'
 import GanttPage from './pages/GanttPage'
+import ReleasesPage from './pages/ReleasesPage'
 
 export default function App() {
   const [view, setView] = useState<View>('home')
@@ -25,6 +26,7 @@ export default function App() {
             onConsumeInitialChartId={() => setPendingChartId(null)}
           />
         )}
+        {view === 'releases' && <ReleasesPage />}
       </main>
     </div>
   )

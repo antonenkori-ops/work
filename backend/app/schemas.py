@@ -150,3 +150,186 @@ class GanttChartOut(BaseModel):
         if start is None or end is None:
             return None
         return (end - start).days + 1
+
+
+class ReleaseTicketCreate(BaseModel):
+    label: str
+    key: str
+    kind: str = "other"
+
+
+class ReleaseTicketUpdate(BaseModel):
+    label: str | None = None
+    key: str | None = None
+    kind: str | None = None
+
+
+class ReleaseTicketOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    key: str
+    kind: str
+    sort_order: int
+
+    @computed_field
+    @property
+    def jira_url(self) -> str:
+        return f"{settings.jira_base_url.rstrip('/')}/browse/{self.key}"
+
+
+class ReleaseModuleSetEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    version: str | None
+    sort_order: int
+
+
+class ReleaseModuleSetCreate(BaseModel):
+    name: str
+
+
+class ReleaseModuleSetUpdate(BaseModel):
+    name: str | None = None
+
+
+class ReleaseModuleSetBulkIn(BaseModel):
+    text: str
+
+
+class ReleaseModuleSetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    sort_order: int
+    entries: list[ReleaseModuleSetEntryOut] = []
+
+
+class ReleaseItemCreate(BaseModel):
+    section: str
+    item_type: str = "work"
+    title: str
+    duration_minutes: int | None = None
+    depends_on_id: int | None = None
+    start_at: datetime | None = None
+    executor: str | None = None
+    comment: str | None = None
+    marker_at: datetime | None = None
+    module_set_id: int | None = None
+
+
+class ReleaseItemUpdate(BaseModel):
+    title: str | None = None
+    duration_minutes: int | None = None
+    depends_on_id: int | None = None
+    start_at: datetime | None = None
+    executor: str | None = None
+    comment: str | None = None
+    marker_at: datetime | None = None
+    module_set_id: int | None = None
+
+
+class ReleaseItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    section: str
+    item_type: str
+    title: str
+    # Текст с подставленными вместо {{sprint_key}}/{{sprint_branch}}/{{bundle_key}}/
+    # {{bundle_label}} реальными значениями тикетов из шапки — для отображения
+    # (в форме редактирования показывается исходный title с плейсхолдерами).
+    title_display: str = ""
+    comment_display: str | None = None
+    duration_minutes: int | None
+    start_at: datetime | None
+    end_at: datetime | None
+    depends_on_id: int | None
+    executor: str | None
+    comment: str | None
+    marker_at: datetime | None
+    sort_order: int
+    number: int | None = None
+    module_set_id: int | None
+
+
+class ReleaseRiskCreate(BaseModel):
+    description: str
+    level: str | None = None
+    measures: str | None = None
+    owners: str | None = None
+
+
+class ReleaseRiskUpdate(BaseModel):
+    description: str | None = None
+    level: str | None = None
+    measures: str | None = None
+    owners: str | None = None
+
+
+class ReleaseRiskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+    level: str | None
+    measures: str | None
+    owners: str | None
+    sort_order: int
+    number: int | None = None
+
+
+class ReleaseReorderIn(BaseModel):
+    item_ids: list[int]
+
+
+class ReleaseAdminCreate(BaseModel):
+    name: str
+
+
+class ReleaseAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class ReleaseCreate(BaseModel):
+    kind: str = "planned"
+    title: str | None = None
+    main_admin: str | None = None
+    second_admin: str | None = None
+    tickets: list[ReleaseTicketCreate] = []
+
+
+class ReleaseUpdate(BaseModel):
+    title: str | None = None
+    main_admin: str | None = None
+    second_admin: str | None = None
+    rollback_note: str | None = None
+
+
+class ReleaseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    title: str
+    main_admin: str | None
+    second_admin: str | None
+    rollback_note: str | None
+    created_at: datetime
+    updated_at: datetime
+    tickets: list[ReleaseTicketOut] = []
+    items: list[ReleaseItemOut] = []
+    risks: list[ReleaseRiskOut] = []
+    module_sets: list[ReleaseModuleSetOut] = []
+
+    @computed_field
+    @property
+    def item_count(self) -> int:
+        return len([i for i in self.items if i.item_type == "work"])

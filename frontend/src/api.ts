@@ -164,3 +164,240 @@ export function reorderGanttStages(chartId: number, stageIds: number[]): Promise
     stage_ids: stageIds,
   })
 }
+
+// --- Releases ---------------------------------------------------------
+
+export type ReleaseSection = 'prep' | 'main' | 'closing' | 'rollback'
+export type ReleaseItemType = 'work' | 'marker'
+
+export type ReleaseTicketKind = 'sprint' | 'bundle' | 'rov' | 'other'
+
+export interface ReleaseTicket {
+  id: number
+  label: string
+  key: string
+  kind: ReleaseTicketKind
+  jira_url: string
+  sort_order: number
+}
+
+export interface ReleaseModuleSetEntry {
+  id: number
+  name: string
+  version: string | null
+  sort_order: number
+}
+
+export interface ReleaseModuleSet {
+  id: number
+  name: string
+  sort_order: number
+  entries: ReleaseModuleSetEntry[]
+}
+
+export interface ReleaseItem {
+  id: number
+  section: ReleaseSection
+  item_type: ReleaseItemType
+  title: string
+  title_display: string
+  comment_display: string | null
+  duration_minutes: number | null
+  start_at: string | null
+  end_at: string | null
+  depends_on_id: number | null
+  executor: string | null
+  comment: string | null
+  marker_at: string | null
+  sort_order: number
+  number: number | null
+  module_set_id: number | null
+}
+
+export interface ReleaseRisk {
+  id: number
+  description: string
+  level: string | null
+  measures: string | null
+  owners: string | null
+  sort_order: number
+  number: number | null
+}
+
+export interface Release {
+  id: number
+  kind: string
+  title: string
+  main_admin: string | null
+  second_admin: string | null
+  rollback_note: string | null
+  created_at: string
+  updated_at: string
+  tickets: ReleaseTicket[]
+  items: ReleaseItem[]
+  risks: ReleaseRisk[]
+  module_sets: ReleaseModuleSet[]
+  item_count: number
+}
+
+export interface ReleaseAdmin {
+  id: number
+  name: string
+}
+
+export interface ReleaseCreateInput {
+  kind?: string
+  title?: string
+  main_admin?: string
+  second_admin?: string
+  tickets?: { label: string; key: string; kind: ReleaseTicketKind }[]
+}
+
+export interface ReleaseUpdateInput {
+  title?: string
+  main_admin?: string
+  second_admin?: string
+  rollback_note?: string
+}
+
+export interface ReleaseItemCreateInput {
+  section: ReleaseSection
+  item_type?: ReleaseItemType
+  title: string
+  duration_minutes?: number | null
+  depends_on_id?: number | null
+  start_at?: string | null
+  executor?: string | null
+  comment?: string | null
+  marker_at?: string | null
+  module_set_id?: number | null
+}
+
+export interface ReleaseItemUpdateInput {
+  title?: string
+  duration_minutes?: number | null
+  depends_on_id?: number | null
+  start_at?: string | null
+  executor?: string | null
+  comment?: string | null
+  marker_at?: string | null
+  module_set_id?: number | null
+}
+
+export interface ReleaseRiskInput {
+  description?: string
+  level?: string | null
+  measures?: string | null
+  owners?: string | null
+}
+
+export function fetchReleases(): Promise<Release[]> {
+  return jsonRequest(`${API_BASE}/releases`, 'GET')
+}
+
+export function fetchRelease(releaseId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}`, 'GET')
+}
+
+export function createRelease(input: ReleaseCreateInput): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases`, 'POST', input)
+}
+
+export function updateRelease(releaseId: number, input: ReleaseUpdateInput): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}`, 'PATCH', input)
+}
+
+export function deleteRelease(releaseId: number): Promise<void> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}`, 'DELETE')
+}
+
+export function fetchReleaseAdmins(): Promise<ReleaseAdmin[]> {
+  return jsonRequest(`${API_BASE}/releases/admins`, 'GET')
+}
+
+export function addReleaseAdmin(name: string): Promise<ReleaseAdmin> {
+  return jsonRequest(`${API_BASE}/releases/admins`, 'POST', { name })
+}
+
+export function addReleaseTicket(
+  releaseId: number,
+  label: string,
+  key: string,
+  kind: ReleaseTicketKind = 'other',
+): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}/tickets`, 'POST', { label, key, kind })
+}
+
+export function updateReleaseTicket(
+  ticketId: number,
+  input: { label?: string; key?: string; kind?: ReleaseTicketKind },
+): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/tickets/${ticketId}`, 'PATCH', input)
+}
+
+export function deleteReleaseTicket(ticketId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/tickets/${ticketId}`, 'DELETE')
+}
+
+export function addReleaseItem(
+  releaseId: number,
+  input: ReleaseItemCreateInput,
+): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}/items`, 'POST', input)
+}
+
+export function updateReleaseItem(
+  itemId: number,
+  input: ReleaseItemUpdateInput,
+): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/items/${itemId}`, 'PATCH', input)
+}
+
+export function deleteReleaseItem(itemId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/items/${itemId}`, 'DELETE')
+}
+
+export function addModuleSet(releaseId: number, name: string): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}/module-sets`, 'POST', { name })
+}
+
+export function renameModuleSet(setId: number, name: string): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/module-sets/${setId}`, 'PATCH', { name })
+}
+
+export function deleteModuleSet(setId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/module-sets/${setId}`, 'DELETE')
+}
+
+export function bulkSetModuleSetEntries(setId: number, text: string): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/module-sets/${setId}/entries/bulk`, 'POST', { text })
+}
+
+export function addReleaseRisk(releaseId: number, input: ReleaseRiskInput): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/${releaseId}/risks`, 'POST', input)
+}
+
+export function updateReleaseRisk(riskId: number, input: ReleaseRiskInput): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/risks/${riskId}`, 'PATCH', input)
+}
+
+export function deleteReleaseRisk(riskId: number): Promise<Release> {
+  return jsonRequest(`${API_BASE}/releases/risks/${riskId}`, 'DELETE')
+}
+
+export async function downloadReleaseExport(releaseId: number, title: string): Promise<void> {
+  const resp = await fetch(`${API_BASE}/releases/${releaseId}/export.xlsx`)
+  if (!resp.ok) {
+    throw new Error(`Не удалось скачать файл (${resp.status})`)
+  }
+  const blob = await resp.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const safeTitle = title.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'release'
+  a.download = `Plan_${safeTitle}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}

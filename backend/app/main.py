@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.database import Base, engine
-from app.routers import gantt, stats, tasks
+from app.routers import gantt, releases, stats, tasks
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,6 +28,7 @@ def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(tasks.router)
 app.include_router(stats.router)
 app.include_router(gantt.router)
+app.include_router(releases.router)
 
 
 @app.get("/api/health")
